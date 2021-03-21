@@ -1,6 +1,7 @@
 from django.db import models
 from datetime import date
 # Create your models here.
+import django.utils.timezone
 
 class Sign_Recode(models.Model):
     #用来记录每天的打卡事项
@@ -9,7 +10,7 @@ class Sign_Recode(models.Model):
         (2,'否'),
     )
     id = models.AutoField('打卡记录',primary_key = True)
-    sign_time = models.DateTimeField('打卡日期',default=date.today())
+    sign_time = models.DateTimeField('打卡日期',default=django.utils.timezone.now)
     get_up = models.CharField('早起',choices=recode_chioce,max_length=8)
     sleep_early = models.CharField('早睡',choices=recode_chioce,max_length=8)
     english_study = models.CharField('英语学习',choices=recode_chioce,max_length=8)
@@ -32,7 +33,7 @@ class Sign_Moon(models.Model):
         (5,'很差'),
     )
     id = models.AutoField('身心状况',primary_key = True)
-    sign_time = models.DateTimeField('打卡时间',default=date.today())
+    sign_time = models.DateTimeField('打卡时间',default=django.utils.timezone.now)
     moon = models.CharField('心情状况',choices=moon_chioce,max_length=8)
     body =  models.CharField('身体状况',choices=moon_chioce,max_length=8)
 

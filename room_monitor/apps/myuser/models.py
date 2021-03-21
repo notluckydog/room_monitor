@@ -11,6 +11,7 @@ class MyUser(AbstractUser):
 
 
     class Meta:
+        managed = True
         db_table='myuser_MyUser'
         verbose_name = '用户'
         verbose_name_plural = verbose_name
