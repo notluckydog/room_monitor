@@ -18,6 +18,7 @@ class DeviceRun(models.Model):
 class DeviceStatus(models.Model):
     #记录设备在线信息
     id = models.AutoField('设备在线信息',primary_key = True)
+    status_time = models.DateTimeField('在线时间')
     CO2_status = models.CharField('二氧化碳传感器',default='离线',max_length=10)
     DHT11_status = models.CharField('温湿度传感器',default='离线',max_length=10)
 
@@ -30,6 +31,7 @@ class DeviceStatus(models.Model):
 class DeviceWarn(models.Model):
     #记录环境预警指标，例如二氧化碳最大值等
     id =models.AutoField('设备预警指标',primary_key = True)
+    warn_time = models.DateTimeField('报警时间')
     CO2_max = models.IntegerField('二氧化碳最大值',default='100')
     CO2_min = models.IntegerField('二氧化碳最小值',default='100')
     tem_max = models.IntegerField('温度最高值',default='85')

@@ -130,3 +130,25 @@ REGEX_MOBILE = "^1[358]\d{9}$|^147\d{8}$|^176\d{8}$"
 
 # 云片网APIKEY
 APIKEY = "45706eb4d3f9ca685caee4a9c57ce03f"
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES':(
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+    )
+}
+
+#自定义用户认证
+AUTHENTICATION_BACKENDS = (
+    'myuser.views.CustomBackend',
+)
+
+import datetime
+#JWT有效时间
+JWT_AUTH = {
+    'JWT_EXPIRATION_DELTA':datetime.timedelta(days =7),
+    'JWT_AUTH_HEADER_PREFIX':'JWT',#JWT与前端保持一致
+
+}

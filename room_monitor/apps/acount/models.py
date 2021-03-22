@@ -5,6 +5,10 @@ from django.db import models
 # Create your models here.
 import datetime
 
+from django.db.models import CASCADE
+
+from ..myuser.models import MyUser
+
 class Expenditure(models.Model):
     #用来记录支出
     kind_type = (
@@ -23,9 +27,11 @@ class Expenditure(models.Model):
     ex_time = models.DateTimeField('消费时间',default=django.utils.timezone.now)
     ex_kind = models.CharField('消费种类',choices=kind_type,max_length=8)
     ex_text = models.CharField('消费备注',default='无',max_length=20)
+    user = models.OneToOneField(MyUser,on_delete = models.CASCADE,
+                                related_name ='user_expenditure' )
 
     class Meta:
-        db_table = "account_expenditrue"
+        db_table = "account_expenditure"
         verbose_name = "消费支出"
         verbose_name_plural = verbose_name
 
@@ -47,3 +53,10 @@ class Income(models.Model):
     in_time = models.DateTimeField('收入时间',default=django.utils.timezone.now)
     in_kind = models.CharField('收入种类',choices=type_income,max_length=8)
     in_text = models.CharField('收入备注',default='无',max_length=20)
+    user = models.OneToOneField(MyUser,on_delete = CASCADE,
+                                related_name = 'user_income')
+
+    class Meta:
+        db_table = "account_income"
+        verbose_name = "收入"
+        verbose_name_plural = verbose_name
