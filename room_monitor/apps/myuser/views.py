@@ -2,27 +2,24 @@ import datetime
 import json
 import random
 import re
-from random import choice
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 from django.db.models import Q
+from rest_framework import status
+from rest_framework.response import Response
+
+from .serializer import CodeSerialzer
+
 from django.http import HttpResponse
 from django.shortcuts import render
 
 # Create your views here.
-from rest_framework import viewsets, status, mixins, authentication, permissions
-from rest_framework.mixins import CreateModelMixin
-from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_jwt.authentication import JSONWebTokenAuthentication
-from rest_framework_jwt.settings import api_settings
 
-from apps.myuser.models import VerifyCode, MyUser, UserToken
-from apps.myuser.serializer import SmsSerializer, UserRegSerializer, UserDetailSerializer
-from room_monitor.settings import APIKEY
+from apps.myuser.models import Code, UserProfile
+from room.settings import APIKEY
 from utils.yunpian import YunPian
-
 
 MyUser=get_user_model()
 class CustomBackend(ModelBackend):
@@ -32,7 +29,7 @@ class CustomBackend(ModelBackend):
     def authenticate(self, request, username=None, password=None, **kwargs):
         try:
             #用户名和手机都能登录
-            user = MyUser.objects.get(
+            user = UserProfile.objects.get(
                 Q(username=username) | Q(mobile=username))
             if user.check_password(password):
 
@@ -40,98 +37,253 @@ class CustomBackend(ModelBackend):
         except Exception as e:
             return None
 
-class SmsCodeViewset(CreateModelMixin,viewsets.GenericViewSet):
-    '''
-    手机验证码
-    '''
-    serializer_class = SmsSerializer
+class SendCodeView(APIView):
 
-    def generate_code(self):
-        """
-        生成四位数字的验证码
-        """
-        seeds = "1234567890"
-        random_str = []
-        for i in range(4):
-            random_str.append(choice(seeds))
+    """
 
-        return "".join(random_str)
+    获取手机验证码
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        #验证合法
-        serializer.is_valid(raise_exception=True)
+    """
 
-        mobile = serializer.validated_data["mobile"]
+    def get(self,request):
+        phone=request.GET.get('phone')
+        if phone:
+            #验证是否为有效手机号
+            mobile_pat = re.compile('^(13\d|14[5|7]|15\d|166|17\d|18\d)\d{8}$')
+            res = re.search(mobile_pat, phone)
 
-        yun_pian = YunPian(APIKEY)
-        #生成验证码
-        code = self.generate_code()
+            if res:
+                #如果手机号合法，查看手机号是否被注册过
+                had_register=UserProfile.objects.filter(phone=phone)
+                if had_register:
+                    msg = '手机号已被注册！'
+                    result = {"status": "402", "data": {'msg': msg}}
+                    return HttpResponse(json.dumps(result, ensure_ascii=False),
+                    content_type="application/json,charset=utf-8")
+                else:
+                    #检测是否发送过验证码，如果没发送过则发送验证码，如果发送过则另做处理
+                    had_send=Code.objects.filter(phone=phone).last()
+                    if had_send:
+                        #如果这个号码发送过验证码，查看距离上次发送时间间隔是否达到一分钟
+                        if had_send.add_time.replace(tzinfo=None)>(datetime.datetime.now()-datetime.timedelta(minutes=1)):
+                            msg = '距离上次发送验证码不足1分钟！'
+                            result = {"status": "403", "data": {'msg': msg}}
+                            return HttpResponse(json.dumps(result,ensure_ascii=
+                            False), content_type="application/json,charset=utf-8")
+                        else:
+                            # 发送验证码
+                            code = Code()
+                            code.phone = phone
 
-        sms_status = yun_pian.send_sms(code=code, mobile=mobile)
+                            # 生成验证码
+                            c = random.randint(1000, 9999)
+                            code.code = str(c)
 
-        if sms_status["code"] != 0:
-            return Response({
-                "mobile": sms_status["msg"]
-            }, status=status.HTTP_400_BAD_REQUEST)
+                            # 设定验证码的过期时间为20分钟以后
+                            code.end_time = datetime.datetime.now() + datetime.timedelta(minutes=20)
+                            code.save()
+
+                            # 调用发送模块
+                            code = Code.objects.filter(phone=phone).last().code
+                            yunpian = YunPian(APIKEY)
+                            sms_status = yunpian.send_sms(code=code, mobile=phone)
+                            msg = sms_status
+                            return HttpResponse(msg)
+
+                    else:
+
+                        #发送验证码
+
+                        code = Code()
+
+                        code.phone = phone
+
+                        #生成验证码
+
+                        c = random.randint(1000, 9999)
+
+                        code.code = str(c)
+
+                        #设定验证码的过期时间为20分钟以后
+
+                        code.end_time=datetime.datetime.now()+datetime.timedelta(minutes=20)
+
+                        code.save()
+
+                        #调用发送模块
+
+                        code = Code.objects.filter(phone=phone).last().code
+
+                        yunpian = YunPian(APIKEY)
+
+                        sms_status = yunpian.send_sms(code=code, mobile=phone)
+
+                        msg = sms_status
+
+                        # print(msg)
+
+                        return HttpResponse(msg)
+            else:
+
+                msg = '手机号不合法！'
+
+                result = {"status": "403", "data": {'msg': msg}}
+
+                return HttpResponse(json.dumps(result, ensure_ascii=False),
+
+                content_type="application/json,charset=utf-8")
+
         else:
-            code_record = VerifyCode(code=code, mobile=mobile)
-            code_record.save()
-            return Response({
-                "mobile": mobile
-            }, status=status.HTTP_201_CREATED)
+
+            msg = '手机号为空！'
+
+            result = {"status": "404", "data": {'msg': msg}}
+
+            return HttpResponse(json.dumps(result, ensure_ascii=False),
+
+            content_type="application/json,charset=utf-8")
+
+class RegisterView(APIView):
+
+    """
+
+    注册类
+
+    """
+
+    def get(self,request):
+
+        username=request.GET.get('username')
+
+        pwd=request.GET.get('pwd')
+
+        phone=request.GET.get('phone')
+
+        email=request.GET.get('email')
+
+        code=request.GET.get('code')
+
+        if username:
+
+            pass
+
+        else:
+
+            msg = '用户名不能为空！'
+
+            result = {"status": "404", "data": {'msg': msg}}
+
+            return HttpResponse(json.dumps(result, ensure_ascii=False),
+
+            content_type="application/json,charset=utf-8")
+
+        if pwd:
+
+            pass
+
+        else:
+
+            msg = '密码不能为空！'
+
+            result = {"status": "404", "data": {'msg': msg}}
+
+            return HttpResponse(json.dumps(result, ensure_ascii=False),
+
+            content_type="application/json,charset=utf-8")
+
+        if phone:
+
+            pass
+
+        else:
+
+            msg = '手机号不能为空！'
+
+            result = {"status": "404", "data": {'msg': msg}}
+
+            return HttpResponse(json.dumps(result, ensure_ascii=False),
+
+            content_type="application/json,charset=utf-8")
+
+        if email:
+
+            pass
+
+        else:
+
+            msg = '邮箱不能为空！'
+
+            result = {"status": "404", "data": {'msg': msg}}
+
+            return HttpResponse(json.dumps(result, ensure_ascii=False),
+
+            content_type="application/json,charset=utf-8")
+
+        if code:
+
+            pass
+
+        else:
+
+            msg = '验证码不能为空！'
+
+            result = {"status": "404", "data": {'msg': msg}}
+
+            return HttpResponse(json.dumps(result, ensure_ascii=False),
+
+            content_type="application/json,charset=utf-8")
+
+        #查找对比验证码
+
+        code1=Code.objects.filter(phone=phone).last()
 
 
-class UserViewset(CreateModelMixin,mixins.RetrieveModelMixin,mixins.UpdateModelMixin,viewsets.GenericViewSet):
-    '''
-    用户
-    '''
-    serializer_class = UserRegSerializer
-    queryset = MyUser.objects.all()
-    authentication_classes = (JSONWebTokenAuthentication, authentication.SessionAuthentication)
+        if code==code1.code:
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = self.perform_create(serializer)
-        re_dict = serializer.data
-        jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
-        jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
+            #验证验证码是否已经过期
 
-        payload = jwt_payload_handler(user)
-        re_dict["token"] = jwt_encode_handler(payload)
-        re_dict["name"] = user.name if user.name else user.mobile
+            end_time=code1.end_time
 
-        headers = self.get_success_headers(serializer.data)
+            end_time=end_time.replace(tzinfo=None)
 
-        return Response(re_dict, status=status.HTTP_201_CREATED, headers=headers)
+            if end_time > datetime.datetime.now():
 
-    #这里需要动态权限配置
-    #1.用户注册的时候不应该有权限限制
-    #2.当想获取用户详情信息的时候，必须登录才行
-    def get_permissions(self):
-        if self.action == "retrieve":
-            return [permissions.IsAuthenticated()]
-        elif self.action == "create":
-            return []
+                user = UserProfile()
 
-        return []
+                user.username = username
 
-    #这里需要动态选择用哪个序列化方式
-    #1.UserRegSerializer（用户注册），只返回username和mobile，页面需要显示更多字段，所以要创建一个UserDetailSerializer
-    #2.问题又来了，如果注册的使用userdetailSerializer，又会导致验证失败，所以需要动态的使用serializer
-    def get_serializer_class(self):
-        if self.action == "retrieve":
-            return UserDetailSerializer
-        elif self.action == "create":
-            return UserRegSerializer
+                user.password = pwd
 
-        return UserDetailSerializer
+                user.phone = phone
 
-    #虽然继承了Retrieve可以获取用户详情，但是并不知道用户的id，所有要重写get_object方法
-    #重写get_object方法，就知道是哪个用户了
-    def get_object(self):
-        return self.request.user
+                user.email=email
 
-    def perform_create(self, serializer):
-        return serializer.save()
+                user.save()
+
+                msg = '注册成功！'
+
+                result = {"status": "200", "data": {'msg': msg}}
+
+                return HttpResponse(json.dumps(result, ensure_ascii=False),
+
+                content_type="application/json,charset=utf-8")
+
+            else:
+
+                msg = '验证码已过期！'
+
+
+                result = {"status": "403", "data": {'msg': msg}}
+
+                return HttpResponse(json.dumps(result, ensure_ascii=False),
+
+                content_type="application/json,charset=utf-8")
+
+        else:
+            code2 = CodeSerialzer(code1)
+            msg = '验证码错误！'
+
+            result = {"status": "403", "data": {'msg': code1.code}}
+            return Response(code2.data, status=status.HTTP_200_OK)
+
+            #return HttpResponse(json.dumps(result, ensure_ascii=False),content_type="application/json,charset=utf-8")

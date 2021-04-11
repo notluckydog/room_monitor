@@ -1,43 +1,85 @@
-from django.db import models
+from datetime import datetime
+
 from django.contrib.auth.models import AbstractUser
-import datetime
+from django.db import models
+
 # Create your models here.
-class MyUser(AbstractUser):
-    #用户信息表
-    id = models.AutoField(primary_key = True)
-    mobile = models.TextField(max_length = 11)
-    password = models.TextField(max_length=40)
-    name = models.TextField(max_length=20)
 
+class UserProfile(AbstractUser):
 
-    class Meta:
-        managed = True
-        db_table='myuser_MyUser'
-        verbose_name = '用户'
-        verbose_name_plural = verbose_name
+    """
 
+    用户
 
-class VerifyCode(models.Model):
-    #验证码
+    """
+    is_auther=models.BooleanField(default=False,verbose_name='是否认证')
 
-    code = models.CharField("验证码",max_length=10)
-    mobile = models.CharField("电话",max_length=11)
-    add_time = models.DateTimeField("添加时间",default=datetime.datetime.now())
+    phone =models.CharField(max_length=11,verbose_name='电话')
+
+    email = models.CharField(max_length=100,null=True,blank=True,verbose_name='邮箱')
+
+    add_time = models.DateTimeField(default=datetime.now, verbose_name='添加时间')
 
     class Meta:
-        verbose_name = "短信验证"
+        db_table = 'users.UserProfile'
+
+        verbose_name='用户'
+
         verbose_name_plural = verbose_name
 
     def __str__(self):
-        return self.code
 
-class UserToken(models.Model):
-    #token 表
-    user = models.ForeignKey(MyUser,on_delete=models.CASCADE)
-    token = models.CharField(max_length=64,verbose_name='token值')
-    add_time = models.DateTimeField(default=datetime.datetime.now(),verbose_name='添加时间')
+        return self.username
+
+
+class Code(models.Model):
+
+    """
+
+    验证码
+
+    """
+
+    phone=models.CharField(max_length=11,verbose_name='手机号')
+
+    code=models.CharField(max_length=4,verbose_name='验证码')
+
+    add_time = models.DateTimeField(default=datetime.now, verbose_name='添加时间')
+
+    end_time = models.DateTimeField(default=datetime.now, verbose_name='过期时间')
+
     class Meta:
-        verbose_name='token表'
-        verbose_name_plural =verbose_name
+        db_table = 'users.Code'
+
+        verbose_name='验证码表'
+
+        verbose_name_plural = verbose_name
+
     def __str__(self):
-        return self.user.username
+
+        return self.phone
+
+
+class EmailVerifyRecord(models.Model):
+
+    """
+
+    邮箱激活码
+
+    """
+
+    code = models.CharField(max_length=20, verbose_name='激活码')
+
+    email=models.EmailField(max_length=50,verbose_name='邮箱')
+
+    send_time=models.DateTimeField(verbose_name='发送时间',default=datetime.now)
+
+    class Meta:
+
+        verbose_name='邮箱验证码'
+
+        verbose_name_plural=verbose_name
+
+    def __str__(self):
+
+        return '{0}({1})'.format(self.code,self.email)
